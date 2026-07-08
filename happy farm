@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#6fb8dd">
+<title>Little Farm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sky-top: #6fb8dd;
+    --sky-mid: #bfe6f2;
+    --sky-horizon: #eef7e4;
+    --soil: #5c3820;
+    --soil-deep: #402616;
+    --leaf: #4c8c4a;
+    --gold: #e8a23c;
+    --parchment: #fff6e2;
+    --parchment-2: #fbe8c2;
+    --wheat-tag: #e8c547;
+    --carrot-tag: #e8791a;
+    --tomato-tag: #d64545;
+    --shadow: 0 6px 16px rgba(64, 38, 22, 0.2);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    font-family: 'Quicksand', sans-serif;
+    background: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-mid) 45%, var(--sky-horizon) 100%);
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+  }
+  #gameCanvas { position: fixed; top: 0; left: 0; display: block; touch-action: none; }
+
+  #ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .panel {
+    background: rgba(255, 246, 226, 0.92);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+  }
+
+  #topBar {
+    position: absolute;
+    top: max(14px, env(safe-area-inset-top));
+    left: 14px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 18px;
+    pointer-events: auto;
+  }
+  .stat { display: flex; align-items: center; gap: 6px; }
+  .stat-icon { font-size: 20px; line-height: 1; }
+  .stat-value { font-family: 'Baloo 2', sans-serif; font-weight: 700; font-size: 18px; color: var(--soil-deep); }
+
+  #title {
+    position: absolute;
+    top: max(14px, env(safe-area-inset-top));
+    right: 14px;
+    padding: 10px 4px;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 600;
+    color: var(--soil-deep);
+    font-size: 16px;
+    text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+  }
+
+  #hint {
+    position: absolute;
+    top: 62px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 7px 16px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--soil-deep);
+    text-align: center;
+    max-width: 88vw;
+    opacity: 1;
+    transition: opacity 0.8s ease;
+  }
+  #hint.fade { opacity: 0; }
+
+  #cropPanel {
+    position: absolute;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    padding: 12px 10px 10px;
+    pointer-events: auto;
+  }
+  .crop-btn {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: var(--parchment);
+    border-radius: 7px 7px 4px 4px;
+    border-top: 4px solid var(--tag-color, var(--leaf));
+    padding: 9px 14px 7px;
+    min-width: 58px;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(64, 38, 22, 0.18);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+  .crop-btn::before {
+    content: '';
+    position: absolute;
+    top: -9px; left: 50%;
+    transform: translateX(-50%);
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--tag-color, var(--leaf));
+  }
+  .crop-btn[data-crop="wheat"] { --tag-color: var(--wheat-tag); }
+  .crop-btn[data-crop="carrot"] { --tag-color: var(--carrot-tag); }
+  .crop-btn[data-crop="tomato"] { --tag-color: var(--tomato-tag); }
+  .crop-btn .emoji { font-size: 22px; }
+  .crop-btn .name { font-size: 11px; font-weight: 700; color: var(--soil-deep); }
+  .crop-btn .cost { font-size: 10.5px; color: var(--gold); font-weight: 700; }
+  .crop-btn:active { transform: scale(0.94); }
+  .crop-btn.selected { transform: translateY(-4px); box-shadow: 0 6px 14px rgba(64, 38, 22, 0.28); }
+  .crop-btn.unaffordable { opacity: 0.45; }
+  .crop-btn:focus-visible, .zoom-btn:focus-visible {
+    outline: 3px solid var(--leaf);
+    outline-offset: 2px;
+  }
+
+  #zoomControls {
+    position: absolute;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    right: 14px;
+    display: flex; flex-direction: column; gap: 8px;
+    pointer-events: auto;
+  }
+  .zoom-btn {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 20px; font-weight: 700;
+    color: var(--soil-deep);
+    cursor: pointer;
+  }
+  .zoom-btn:active { transform: scale(0.92); }
+
+  #toast {
+    position: absolute;
+    top: max(64px, calc(env(safe-area-inset-top) + 64px));
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    padding: 9px 20px;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--soil-deep);
+    opacity: 0;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    #hint, #toast, .crop-btn, .zoom-btn { transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+  <div id="ui">
+    <div id="topBar" class="panel">
+      <span class="stat"><span class="stat-icon">🪙</span><span id="coinCount" class="stat-value">50</span></span>
+      <span class="stat"><span class="stat-icon">💧</span><span id="waterCount" class="stat-value">0</span></span>
+    </div>
+    <div id="title">🌻 Little Farm</div>
+    <div id="hint">Drag to rotate • Tap soil to plant • Tap the well for water • Tap growing crops to water them • Tap ripe crops to harvest</div>
+    <div id="toast" class="panel"></div>
+    <div id="cropPanel" class="panel">
+      <div class="crop-btn selected" data-crop="wheat" tabindex="0" role="button" aria-label="Select wheat, cost 5 coins"><span class="emoji">🌾</span><span class="name">Wheat</span><span class="cost">5</span></div>
+      <div class="crop-btn" data-crop="carrot" tabindex="0" role="button" aria-label="Select carrot, cost 8 coins"><span class="emoji">🥕</span><span class="name">Carrot</span><span class="cost">8</span></div>
+      <div class="crop-btn" data-crop="tomato" tabindex="0" role="button" aria-label="Select tomato, cost 12 coins"><span class="emoji">🍅</span><span class="name">Tomato</span><span class="cost">12</span></div>
+    </div>
+    <div id="zoomControls">
+      <div class="zoom-btn panel" id="zoomIn" tabindex="0" role="button" aria-label="Zoom in">+</div>
+      <div class="zoom-btn panel" id="zoomOut" tabindex="0" role="button" aria-label="Zoom out">−</div>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+(function () {
+  'use strict';
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Renderer / Scene / Camera ---------- */
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0xbfe6f2, 16, 40);
+
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.domElement.id = 'gameCanvas';
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  const clock = new THREE.Clock();
+
+  /* ---------- Lights ---------- */
+  scene.add(new THREE.AmbientLight(0xfff3e0, 0.7));
+
+  const sun = new THREE.DirectionalLight(0xfff6d5, 1.1);
+  sun.position.set(12, 18, 8);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -12;
+  sun.shadow.camera.right = 12;
+  sun.shadow.camera.top = 12;
+  sun.shadow.camera.bottom = -12;
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 45;
+  sun.shadow.bias = -0.0015;
+  scene.add(sun);
+
+  const sunGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(1.1, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xfff0b3 })
+  );
+  sunGlow.position.copy(sun.position).multiplyScalar(1.5);
+  scene.add(sunGlow);
+
+  /* ---------- Ground ---------- */
+  const grass = new THREE.Mesh(
+    new THREE.CircleGeometry(22, 48),
+    new THREE.MeshStandardMaterial({ color: 0x8fc45a, flatShading: true })
+  );
+  grass.rotation.x = -Math.PI / 2;
+  grass.receiveShadow = true;
+  scene.add(grass);
+
+  /* ---------- Crop definitions ---------- */
+  const CROPS = {
+    wheat:  { name: 'Wheat',  emoji: '🌾', cost: 5,  reward: 12, growTime: 12, stem: 0x7a9c4e, fruit: 0xe8c547 },
+    carrot: { name: 'Carrot', emoji: '🥕', cost: 8,  reward: 20, growTime: 18, stem: 0x4f7942, fruit: 0xe8791a },
+    tomato: { name: 'Tomato', emoji: '🍅', cost: 12, reward: 30, growTime: 25, stem: 0x3f7d3f, fruit: 0xd64545 }
+  };
+  const SOIL_EMPTY = 0x8a5a3c;
+  const SOIL_WET = 0x5c3a22;
+  const SOIL_DRY = 0xc9a876;
+  const WATER_MAX = 20;
+  const WATER_PER_COLLECT = 5;
+  const WATER_DURATION = 9;
+
+  /* ---------- Farm grid ---------- */
+  const GRID = 6;
+  const SPACING = 1.5;
+  const PLOT_SIZE = 1.15;
+  const PLOT_HEIGHT = 0.22;
+  const offset = (GRID - 1) * SPACING / 2;
+
+  const farmGroup = new THREE.Group();
+  scene.add(farmGroup);
+
+  const plots = [];
+
+  function createCropMesh(key) {
+    const def = CROPS[key];
+    const group = new THREE.Group();
+
+    const stemMat = new THREE.MeshStandardMaterial({ color: def.stem, flatShading: true });
+    for (let i = 0; i < 3; i++) {
+      const h = 0.5 + Math.random() * 0.15;
+      const blade = new THREE.Mesh(new THREE.ConeGeometry(0.12, h, 6), stemMat);
+      blade.position.set((Math.random() - 0.5) * 0.25, h / 2, (Math.random() - 0.5) * 0.25);
+      blade.rotation.y = Math.random() * Math.PI;
+      blade.castShadow = true;
+      group.add(blade);
+    }
+
+    const fruitMat = new THREE.MeshStandardMaterial({ color: def.fruit, flatShading: true });
+    const fruits = [];
+    const fruitCount = 3;
+    for (let i = 0; i < fruitCount; i++) {
+      const angle = (i / fruitCount) * Math.PI * 2;
+      const fruit = new THREE.Mesh(new THREE.IcosahedronGeometry(0.14, 0), fruitMat);
+      fruit.position.set(Math.cos(angle) * 0.18, 0.55, Math.sin(angle) * 0.18);
+      fruit.scale.setScalar(0.001);
+      fruit.castShadow = true;
+      group.add(fruit);
+      fruits.push(fruit);
+    }
+    group.userData.fruits = fruits;
+    group.userData.stemMat = stemMat;
+    return group;
+  }
+
+  let plotIndex = 0;
+  for (let gx = 0; gx < GRID; gx++) {
+    for (let gz = 0; gz < GRID; gz++) {
+      const soil = new THREE.Mesh(
+        new THREE.BoxGeometry(PLOT_SIZE, PLOT_HEIGHT, PLOT_SIZE),
+        new THREE.MeshStandardMaterial({ color: SOIL_EMPTY, flatShading: true })
+      );
+      soil.position.set(gx * SPACING - offset, PLOT_HEIGHT / 2, gz * SPACING - offset);
+      soil.receiveShadow = true;
+      soil.castShadow = true;
+      soil.userData.plotIndex = plotIndex;
+      farmGroup.add(soil);
+
+      plots.push({
+        mesh: soil,
+        state: 'empty',
+        cropType: null,
+        cropGroup: null,
+        growProgress: 0,
+        watered: false,
+        wetUntil: 0,
+        gridX: gx,
+        gridZ: gz
+      });
+      plotIndex++;
+    }
+  }
+
+  /* ---------- Fence ---------- */
+  const half = offset + SPACING * 0.85;
+  const fenceGroup = new THREE.Group();
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xac8058, flatShading: true });
+  const postGeo = new THREE.CylinderGeometry(0.05, 0.06, 0.55, 6);
+  const postsPerSide = 7;
+  for (let i = 0; i <= postsPerSide; i++) {
+    const t = -half + (2 * half) * (i / postsPerSide);
+    [[t, -half], [t, half], [-half, t], [half, t]].forEach(([x, z]) => {
+      const post = new THREE.Mesh(postGeo, postMat);
+      post.position.set(x, 0.275, z);
+      post.castShadow = true;
+      fenceGroup.add(post);
+    });
+  }
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xac8058, flatShading: true });
+  const railXGeo = new THREE.BoxGeometry(2 * half, 0.06, 0.06);
+  const railZGeo = new THREE.BoxGeometry(0.06, 0.06, 2 * half);
+  [-half, half].forEach(z => {
+    const rail = new THREE.Mesh(railXGeo, railMat);
+    rail.position.set(0, 0.42, z);
+    rail.castShadow = true;
+    fenceGroup.add(rail);
+  });
+  [-half, half].forEach(x => {
+    const rail = new THREE.Mesh(railZGeo, railMat);
+    rail.position.set(x, 0.42, 0);
+    rail.castShadow = true;
+    fenceGroup.add(rail);
+  });
+  scene.add(fenceGroup);
+
+  /* ---------- Trees ---------- */
+  function createTree(x, z, scale) {
+    const group = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.18, 1, 6),
+      new THREE.MeshStandardMaterial({ color: 0x8a5a3c, flatShading: true })
+    );
+    trunk.position.y = 0.5;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x4f8f4a, flatShading: true });
+    for (let i = 0; i < 3; i++) {
+      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55 - i * 0.09, 0), leafMat);
+      leaf.position.y = 1.05 + i * 0.42;
+      leaf.castShadow = true;
+      group.add(leaf);
+    }
+    group.position.set(x, 0, z);
+    group.scale.setScalar(scale);
+    return group;
+  }
+  [
+    [-half - 1.4, -half - 1.1],
+    [half + 1.5, -half - 0.9],
+    [-half - 1.1, half + 1.4],
+    [half + 1.3, half + 1.5]
+  ].forEach(([x, z]) => scene.add(createTree(x, z, 0.9 + Math.random() * 0.35)));
+
+  /* ---------- Well ---------- */
+  function createWell() {
+    const group = new THREE.Group();
+
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x9c9484, flatShading: true });
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.5, 12), stoneMat);
+    base.position.y = 0.25;
+    base.castShadow = true;
+    base.receiveShadow = true;
+    group.add(base);
+
+    const waterMat = new THREE.MeshStandardMaterial({ color: 0x4fa3d1, flatShading: true, transparent: true, opacity: 0.92 });
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.06, 12), waterMat);
+    water.position.y = 0.47;
+    group.add(water);
+
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x8a5a3c, flatShading: true });
+    const postGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.95, 6);
+    [-0.42, 0.42].forEach(x => {
+      const post = new THREE.Mesh(postGeo, postMat);
+      post.position.set(x, 0.75, 0);
+      post.castShadow = true;
+      group.add(post);
+    });
+
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.94, 6), postMat);
+    beam.rotation.z = Math.PI / 2;
+    beam.position.y = 1.2;
+    beam.castShadow = true;
+    group.add(beam);
+
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x6b8a9c, flatShading: true });
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.78, 0.5, 4), roofMat);
+    roof.position.y = 1.45;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    group.add(roof);
+
+    const rope = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.012, 0.012, 0.35, 4),
+      new THREE.MeshStandardMaterial({ color: 0xcbb992, flatShading: true })
+    );
+    rope.position.y = 1.02;
+    group.add(rope);
+
+    const bucketMat = new THREE.MeshStandardMaterial({ color: 0x6b4226, flatShading: true });
+    const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.16, 8), bucketMat);
+    bucket.position.y = 0.85;
+    bucket.castShadow = true;
+    group.add(bucket);
+
+    group.userData.isWell = true;
+    group.userData.waterMesh = water;
+    group.userData.bucketMesh = bucket;
+    return group;
+  }
+  const wellGroup = createWell();
+  wellGroup.position.set(0, 0, -(half + 1.9));
+  scene.add(wellGroup);
+  let wellPulseStart = -10;
+
+  /* ---------- Clouds ---------- */
+  const clouds = [];
+  function createCloud() {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, transparent: true, opacity: 0.9 });
+    const blobCount = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < blobCount; i++) {
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(0.5 + Math.random() * 0.4, 8, 8), mat);
+      blob.position.set(i * 0.6 - blobCount * 0.3, Math.random() * 0.2, Math.random() * 0.3);
+      group.add(blob);
+    }
+    group.position.set((Math.random() - 0.5) * 44, 9 + Math.random() * 3, (Math.random() - 0.5) * 30 - 8);
+    group.scale.setScalar(1.1 + Math.random());
+    return group;
+  }
+  for (let i = 0; i < 6; i++) {
+    const cloud = createCloud();
+    clouds.push(cloud);
+    scene.add(cloud);
+  }
+
+  /* ---------- Camera controls (custom orbit) ---------- */
+  const view = {
+    theta: Math.PI / 4,
+    phi: 1.0,
+    radius: 13,
+    minRadius: 6,
+    maxRadius: 22,
+    minPhi: 0.5,
+    maxPhi: 1.4,
+    target: new THREE.Vector3(0, 0, 0)
+  };
+
+  function updateCamera() {
+    camera.position.set(
+      view.target.x + view.radius * Math.sin(view.phi) * Math.sin(view.theta),
+      view.target.y + view.radius * Math.cos(view.phi),
+      view.target.z + view.radius * Math.sin(view.phi) * Math.cos(view.theta)
+    );
+    camera.lookAt(view.target);
+  }
+  updateCamera();
+
+  let dragging = false;
+  let dragMoved = 0;
+  let lastX = 0, lastY = 0;
+
+  function pointerDown(x, y) {
+    dragging = true;
+    dragMoved = 0;
+    lastX = x; lastY = y;
+  }
+  function pointerMove(x, y) {
+    if (!dragging) return;
+    const dx = x - lastX;
+    const dy = y - lastY;
+    dragMoved += Math.abs(dx) + Math.abs(dy);
+    view.theta -= dx * 0.0065;
+    view.phi = Math.min(view.maxPhi, Math.max(view.minPhi, view.phi - dy * 0.0065));
+    lastX = x; lastY = y;
+    updateCamera();
+  }
+  function pointerUp(x, y) {
+    dragging = false;
+    if (dragMoved < 6) handleTap(x, y);
+  }
+
+  renderer.domElement.addEventListener('mousedown', e => pointerDown(e.clientX, e.clientY));
+  window.addEventListener('mousemove', e => pointerMove(e.clientX, e.clientY));
+  window.addEventListener('mouseup', e => pointerUp(e.clientX, e.clientY));
+
+  renderer.domElement.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) pointerDown(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchmove', e => {
+    if (e.touches.length === 1) pointerMove(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchend', e => {
+    const t = e.changedTouches[0];
+    pointerUp(t.clientX, t.clientY);
+  }, { passive: true });
+
+  renderer.domElement.addEventListener('wheel', e => {
+    e.preventDefault();
+    view.radius = Math.min(view.maxRadius, Math.max(view.minRadius, view.radius + e.deltaY * 0.01));
+    updateCamera();
+  }, { passive: false });
+
+  function zoomBy(amount) {
+    view.radius = Math.min(view.maxRadius, Math.max(view.minRadius, view.radius + amount));
+    updateCamera();
+  }
+  document.getElementById('zoomIn').addEventListener('click', () => zoomBy(-1.5));
+  document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1.5));
+
+  /* ---------- Game state ---------- */
+  let coins = 50;
+  let water = 0;
+  let selectedCrop = 'wheat';
+
+  const coinEl = document.getElementById('coinCount');
+  const waterEl = document.getElementById('waterCount');
+  const toastEl = document.getElementById('toast');
+  const cropButtons = Array.from(document.querySelectorAll('.crop-btn'));
+  let toastTimer = null;
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1500);
+  }
+
+  function refreshUI() {
+    coinEl.textContent = coins;
+    waterEl.textContent = `${water}/${WATER_MAX}`;
+    cropButtons.forEach(btn => {
+      const def = CROPS[btn.dataset.crop];
+      btn.classList.toggle('unaffordable', coins < def.cost);
+    });
+  }
+  refreshUI();
+
+  function selectCrop(btn) {
+    selectedCrop = btn.dataset.crop;
+    cropButtons.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+  }
+  cropButtons.forEach(btn => {
+    btn.addEventListener('click', () => selectCrop(btn));
+    btn.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectCrop(btn); }
+    });
+  });
+  document.querySelectorAll('.zoom-btn').forEach(btn => {
+    btn.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); }
+    });
+  });
+
+  /* ---------- Interaction ---------- */
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const plotMeshes = plots.map(p => p.mesh);
+  const interactables = plotMeshes.concat([wellGroup]);
+
+  function findInteractable(obj) {
+    while (obj) {
+      if (obj.userData.plotIndex !== undefined || obj.userData.isWell) return obj;
+      obj = obj.parent;
+    }
+    return null;
+  }
+
+  function handleTap(x, y) {
+    ndc.x = (x / window.innerWidth) * 2 - 1;
+    ndc.y = -(y / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(interactables, true);
+    if (!hits.length) return;
+    const obj = findInteractable(hits[0].object);
+    if (!obj) return;
+    if (obj.userData.isWell) {
+      handleWellClick();
+    } else {
+      handlePlotClick(plots[obj.userData.plotIndex]);
+    }
+  }
+
+  function disposeGroup(group) {
+    group.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
+  }
+
+  function dullColor(hex) {
+    return new THREE.Color(hex).lerp(new THREE.Color(0x9c9484), 0.55).getHex();
+  }
+
+  function applyMoisture(plot, watered, wetUntil) {
+    plot.watered = watered;
+    if (wetUntil !== undefined) plot.wetUntil = wetUntil;
+    plot.mesh.material.color.setHex(watered ? SOIL_WET : SOIL_DRY);
+    if (plot.cropGroup) {
+      const def = CROPS[plot.cropType];
+      plot.cropGroup.userData.stemMat.color.setHex(watered ? def.stem : dullColor(def.stem));
+    }
+  }
+
+  function handleWellClick() {
+    if (water >= WATER_MAX) {
+      showToast('Water jug is full!');
+      return;
+    }
+    water = Math.min(WATER_MAX, water + WATER_PER_COLLECT);
+    wellPulseStart = clock.getElapsedTime();
+    showToast(`+${WATER_PER_COLLECT} 💧 Water collected!`);
+    refreshUI();
+  }
+
+  function handlePlotClick(plot) {
+    if (plot.state === 'empty') {
+      const def = CROPS[selectedCrop];
+      if (coins < def.cost) {
+        showToast('Not enough coins!');
+        return;
+      }
+      coins -= def.cost;
+      plot.state = 'growing';
+      plot.cropType = selectedCrop;
+      plot.growProgress = 0;
+      plot.cropGroup = createCropMesh(selectedCrop);
+      plot.cropGroup.position.y = PLOT_HEIGHT / 2;
+      plot.mesh.add(plot.cropGroup);
+      applyMoisture(plot, true, clock.getElapsedTime() + WATER_DURATION);
+      showToast(`Planted ${def.emoji} ${def.name}`);
+      refreshUI();
+    } else if (plot.state === 'growing') {
+      if (plot.watered) {
+        showToast('Already watered 💧');
+        return;
+      }
+      if (water <= 0) {
+        showToast('Out of water — visit the well!');
+        return;
+      }
+      water -= 1;
+      applyMoisture(plot, true, clock.getElapsedTime() + WATER_DURATION);
+      showToast('Watered! 💧');
+      refreshUI();
+    } else if (plot.state === 'ripe') {
+      const def = CROPS[plot.cropType];
+      coins += def.reward;
+      plot.mesh.remove(plot.cropGroup);
+      disposeGroup(plot.cropGroup);
+      plot.cropGroup = null;
+      plot.state = 'empty';
+      plot.cropType = null;
+      plot.mesh.material.color.setHex(SOIL_EMPTY);
+      showToast(`+${def.reward} 🪙 ${def.name} harvested!`);
+      refreshUI();
+    }
+  }
+
+  /* ---------- Resize ---------- */
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  /* ---------- Animation loop ---------- */
+  let lastElapsed = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    const elapsed = clock.getElapsedTime();
+    const dt = elapsed - lastElapsed;
+    lastElapsed = elapsed;
+
+    plots.forEach(plot => {
+      if (plot.state === 'growing') {
+        if (plot.watered && elapsed > plot.wetUntil) {
+          applyMoisture(plot, false);
+        }
+        if (plot.watered) {
+          plot.growProgress += dt;
+        }
+        const def = CROPS[plot.cropType];
+        const frac = Math.min(plot.growProgress / def.growTime, 1);
+        plot.cropGroup.scale.setScalar(0.25 + 0.85 * frac);
+        const fruitFrac = Math.max(0.001, Math.min(1, (frac - 0.55) / 0.45));
+        plot.cropGroup.userData.fruits.forEach(f => f.scale.setScalar(fruitFrac));
+        plot.cropGroup.rotation.z = (plot.watered || reducedMotion) ? 0 : 0.2;
+
+        if (frac >= 1) {
+          plot.state = 'ripe';
+        }
+      } else if (plot.state === 'ripe') {
+        plot.cropGroup.position.y = PLOT_HEIGHT / 2 + (reducedMotion ? 0 : Math.sin(elapsed * 2.5 + plot.gridX + plot.gridZ) * 0.04);
+      }
+    });
+
+    const pulseT = elapsed - wellPulseStart;
+    if (pulseT >= 0 && pulseT < 0.4) {
+      const p = pulseT / 0.4;
+      const bump = reducedMotion ? 0 : Math.sin(p * Math.PI) * 0.15;
+      wellGroup.userData.waterMesh.scale.set(1 + bump, 1, 1 + bump);
+      wellGroup.userData.bucketMesh.position.y = 0.85 - (reducedMotion ? 0 : Math.sin(p * Math.PI) * 0.1);
+    } else {
+      wellGroup.userData.waterMesh.scale.set(1, 1, 1);
+      wellGroup.userData.bucketMesh.position.y = 0.85;
+    }
+
+    if (!reducedMotion) {
+      clouds.forEach(c => {
+        c.position.x += 0.012;
+        if (c.position.x > 24) c.position.x = -24;
+      });
+    }
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  setTimeout(() => {
+    const hint = document.getElementById('hint');
+    if (hint) hint.classList.add('fade');
+  }, 7000);
+
+})();
+  </script>
+</body>
+</html>
